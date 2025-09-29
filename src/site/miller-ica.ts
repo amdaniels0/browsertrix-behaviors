@@ -18,72 +18,104 @@ export class MillerICABehavior {
         linksDiscovered: 0
       },
       opts: { 
-        maxYearExpansions: 25,  // Limit year expansions
-        maxExhibitionClicks: 50, // Limit exhibition clicks
-        waitTime: 1500,         // Wait time between actions
-        scrollDelay: 800,       // Delay after scrolling
-        enableDeepExpansion: false // Whether to click on exhibitions after expanding years
+        maxYearExpansions: 10,  // Reduced for speed
+        maxExhibitionClicks: 20, // Reduced for speed  
+        waitTime: 800,          // Reduced wait time
+        scrollDelay: 400,       // Reduced scroll delay
+        enableDeepExpansion: false, // Keep disabled for safety
+        maxRuntime: 30000       // Maximum 30 seconds runtime
       },
     };
   }
 
   static isMatch() {
-    // Match Miller ICA exhibitions page
+    // Match only the main Miller ICA exhibitions page, not individual exhibition pages
     const url = window.location.href;
-    return url.includes('miller-ica.cmu.edu') && url.includes('exhibitions');
+    const path = window.location.pathname;
+    
+    // Only match the main exhibitions page, not individual exhibition/event/varia pages
+    return url.includes('miller-ica.cmu.edu') && 
+           (path === '/exhibitions' || path === '/exhibitions/');
   }
 
   async *run(ctx) {
     const { Lib, state, opts, log } = ctx;
     const { sleep, xpathNode, xpathNodes, scrollIntoView, addLink } = Lib;
 
-    yield log("Starting Miller ICA Exhibitions expansion");
-
-    // Expand year sections to reveal hidden exhibition content
-    yield* this.expandYearSections(ctx);
+    const startTime = Date.now();
     
-    // Wait for content to fully load after expansion
-    await sleep(2000);
-    
-    // Discover and queue exhibition links for the crawler
-    yield* this.discoverExhibitionLinks(ctx);
+    try {
+      yield log("Starting Miller ICA Exhibitions expansion");
 
-    yield log(`Miller ICA expansion complete. Years expanded: ${state.expandedYears}, Links discovered: ${state.linksDiscovered}, Total interactions: ${state.totalInteractions}`);
+      // Check runtime limit
+      if (Date.now() - startTime > opts.maxRuntime) {
+        yield log("Runtime limit reached, stopping");
+        return;
+      }
+
+      // Expand year sections to reveal hidden exhibition content
+      yield* this.expandYearSections(ctx, startTime);
+      
+      // Check runtime limit again
+      if (Date.now() - startTime > opts.maxRuntime) {
+        yield log("Runtime limit reached after expansion, stopping");
+        return;
+      }
+      
+      // Wait for content to fully load after expansion
+      await sleep(1000); // Reduced from 2000ms
+      
+      // Discover and queue exhibition links for the crawler
+      yield* this.discoverExhibitionLinks(ctx);
+
+      yield log(`Miller ICA expansion complete. Years expanded: ${state.expandedYears}, Links discovered: ${state.linksDiscovered}, Total interactions: ${state.totalInteractions}`);
+    } catch (error) {
+      yield log(`Miller ICA behavior error: ${error.message}`);
+      // Don't rethrow - just log and continue
+    }
   }
 
-  async *expandYearSections(ctx) {
+  async *expandYearSections(ctx, startTime = Date.now()) {
     const { Lib, state, opts, log } = ctx;
     const { sleep, xpathNodes, scrollIntoView } = Lib;
 
-    // Specific selectors for Miller ICA year sections
-    // Focus on non-link elements first, then clickable elements that expand content
+    // Specific selectors for Miller ICA year sections - simplified for better performance
     const yearSelectors = [
-      // Direct text match for years (non-link elements first)
-      "//div[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      "//span[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      "//p[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      // Headings with years
-      "//h1[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      "//h2[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      "//h3[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']",
-      // Only buttons with years (avoid links)
-      "//button[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019' or text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014' or text()='2013' or text()='2012' or text()='2011' or text()='2010' or text()='2009' or text()='2008' or text()='2007' or text()='2006' or text()='2005' or text()='2004' or text()='2003' or text()='2002' or text()='2001' or text()='2000']"
+      // Most likely candidates first for faster matching
+      "//h2[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
+      "//h3[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
+      "//div[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
+      // Fallback to older years if needed
+      "//h2[text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014']",
+      "//h3[text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014']"
     ];
 
     for (const selector of yearSelectors) {
+      // Check runtime limit
+      if (Date.now() - startTime > opts.maxRuntime) {
+        yield log("Runtime limit reached during year expansion");
+        return;
+      }
+      
       try {
         const elements = xpathNodes(selector);
-        const elementArray = Array.from(elements);
+        const elementArray = Array.from(elements).slice(0, 5); // Limit to first 5 matches per selector
         
         if (elementArray.length > 0) {
-          yield log(`Found ${elementArray.length} year elements to expand`);
+          yield log(`Found ${elementArray.length} year elements to expand with selector`);
         }
         
         for (const element of elementArray) {
           const htmlElement = element as HTMLElement;
           if (state.expandedYears >= opts.maxYearExpansions) {
             yield log("Reached maximum year expansions limit");
-            break;
+            return; // Return instead of break to exit completely
+          }
+          
+          // Check runtime limit for each element
+          if (Date.now() - startTime > opts.maxRuntime) {
+            yield log("Runtime limit reached during individual year processing");
+            return;
           }
           
           const yearText = htmlElement.textContent?.trim();
@@ -94,8 +126,11 @@ export class MillerICABehavior {
           }
 
           try {
-            // Scroll element into view
-            await scrollIntoView(htmlElement);
+            // Scroll element into view with timeout protection
+            await Promise.race([
+              scrollIntoView(htmlElement),
+              sleep(2000) // Max 2 seconds for scroll
+            ]);
             await sleep(opts.scrollDelay);
 
             // Try clicking the year element
@@ -106,10 +141,9 @@ export class MillerICABehavior {
             
             await sleep(opts.waitTime);
             
-            // Look for expansion triggers near the year element
-            // Focus on buttons, toggles, and other expansion elements (not links)
+            // Look for expansion triggers near the year element - reduced scope
             const nearbyExpanders = this.findNearbyExpandableElements(htmlElement);
-            for (const expander of nearbyExpanders.slice(0, 2)) { // Limit to 2 to be conservative
+            for (const expander of nearbyExpanders.slice(0, 1)) { // Reduced from 2 to 1
               try {
                 const expanderText = expander.textContent?.trim()?.substring(0, 50) || 'unnamed';
                 
@@ -119,7 +153,7 @@ export class MillerICABehavior {
                 }
                 
                 expander.click();
-                await sleep(500);
+                await sleep(300); // Reduced from 500ms
                 state.totalInteractions++;
               } catch (e) {
                 // Silent error handling for expansion elements

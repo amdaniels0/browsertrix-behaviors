@@ -22,14 +22,15 @@ export class CSSExpanderBehavior {
         totalInteractions: 0 
       },
       opts: { 
-        maxExpansions: 50,  // Limit to prevent infinite loops
-        waitTime: 1000,     // Wait time between expansions
-        retryAttempts: 3,   // Number of retry attempts for failed expansions
+        maxExpansions: 20,  // Reduced for better performance
+        waitTime: 500,      // Reduced wait time
+        retryAttempts: 2,   // Reduced retry attempts
         enableScrolling: true, // Whether to scroll elements into view
         expandAccordions: true,
         expandShowMore: true,
         expandYearSections: true,
-        expandTabs: true
+        expandTabs: true,
+        maxRuntime: 25000   // Maximum 25 seconds runtime
       },
     };
   }
@@ -44,14 +45,40 @@ export class CSSExpanderBehavior {
     const { Lib, state, opts, log } = ctx;
     const { sleep, xpathNode, xpathNodes, scrollIntoView } = Lib;
 
-    yield* this.expandAccordionElements(ctx);
-    yield* this.expandShowMoreButtons(ctx);
-    yield* this.expandYearSections(ctx);
-    yield* this.expandTabInterfaces(ctx);
-    yield* this.expandCollapsibleDivs(ctx);
-    yield* this.expandDropdownMenus(ctx);
+    const startTime = Date.now();
+    
+    try {
+      yield log(`Starting CSS expansion with ${opts.maxRuntime}ms runtime limit`);
+      
+      if (opts.expandAccordions && Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandAccordionElements(ctx);
+      }
+      
+      if (opts.expandShowMore && Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandShowMoreButtons(ctx);
+      }
+      
+      if (opts.expandYearSections && Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandYearSections(ctx);
+      }
+      
+      if (opts.expandTabs && Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandTabInterfaces(ctx);
+      }
+      
+      if (Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandCollapsibleDivs(ctx);
+      }
+      
+      if (Date.now() - startTime < opts.maxRuntime) {
+        yield* this.expandDropdownMenus(ctx);
+      }
 
-    yield ctx.log(`CSS Expansion complete. Total interactions: ${state.totalInteractions}`);
+      yield log(`CSS Expansion complete. Total interactions: ${state.totalInteractions}, Runtime: ${Date.now() - startTime}ms`);
+    } catch (error) {
+      yield log(`CSS Expansion error: ${error.message}`);
+      // Don't rethrow - just log and continue
+    }
   }
 
   async *expandAccordionElements(ctx) {
