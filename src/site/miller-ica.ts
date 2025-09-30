@@ -79,15 +79,42 @@ export class MillerICABehavior {
     const { Lib, state, opts, log } = ctx;
     const { sleep, xpathNodes, scrollIntoView } = Lib;
 
-    // Specific selectors for Miller ICA year sections - simplified for better performance
+    yield log("=== DIAGNOSTIC MODE: MillerICA Year Section Analysis ===");
+    
+    // First, let's understand the page structure
+    yield log("Page URL: " + window.location.href);
+    yield log("Page title: " + document.title);
+    
+    // Look for all clickable year elements
+    const diagnosticSelectors = [
+      "//h2[contains(text(), '20')]", // Any h2 with years
+      "//div[@class='py-4 cursor-pointer']", // The actual clickable containers  
+      "//*[contains(@class, 'cursor-pointer')][contains(text(), '20')]", // Clickable elements with years
+      "//*[contains(text(), '2023') or contains(text(), '2022') or contains(text(), '2021') or contains(text(), '2020')]"
+    ];
+    
+    for (const selector of diagnosticSelectors) {
+      try {
+        const elements = Array.from(xpathNodes(selector));
+        yield log(`Selector: ${selector} found ${elements.length} elements`);
+        
+        for (let index = 0; index < Math.min(elements.length, 5); index++) {
+          const htmlEl = elements[index] as HTMLElement;
+          yield log(`  Element ${index}: tagName=${htmlEl.tagName}, text="${htmlEl.textContent?.trim()}", classes="${htmlEl.className}", clickable=${htmlEl.style.cursor || 'auto'}`);
+        }
+      } catch (e) {
+        yield log(`Error with selector ${selector}: ${e.message}`);
+      }
+    }
+
+    // Now try the refined selectors based on the actual page structure
     const yearSelectors = [
-      // Most likely candidates first for faster matching
-      "//h2[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
-      "//h3[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
-      "//div[text()='2023' or text()='2022' or text()='2021' or text()='2020' or text()='2019']",
-      // Fallback to older years if needed
-      "//h2[text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014']",
-      "//h3[text()='2018' or text()='2017' or text()='2016' or text()='2015' or text()='2014']"
+      // Target the actual clickable year containers
+      "//div[contains(@class, 'cursor-pointer')]//h2[contains(text(), '202')]", // Years 2020-2029
+      "//div[contains(@class, 'cursor-pointer')]//h2[contains(text(), '201')]", // Years 2010-2019  
+      "//div[@class='py-4 cursor-pointer']", // Direct clickable containers
+      // Fallback to any clickable year elements
+      "//*[contains(@class, 'cursor-pointer')][contains(text(), '20')]"
     ];
 
     for (const selector of yearSelectors) {
@@ -133,34 +160,63 @@ export class MillerICABehavior {
             ]);
             await sleep(opts.scrollDelay);
 
-            // Try clicking the year element
-            yield log(`Expanding year section: ${yearText}`);
-            htmlElement.click();
+            // Get initial page state for comparison
+            const initialHTML = document.body.innerHTML.length;
+            const initialLinks = document.querySelectorAll('a[href*="exhibition"]').length;
+            
+            yield log(`About to click year: ${yearText}`);
+            yield log(`  Element parent: ${htmlElement.parentElement?.className || 'none'}`);
+            yield log(`  Element tag: ${htmlElement.tagName}`);
+            yield log(`  Initial page HTML length: ${initialHTML}`);
+            yield log(`  Initial exhibition links: ${initialLinks}`);
+            
+            // Click the element (this might be the h2 or the container)
+            let clickTarget = htmlElement;
+            
+            // If this is an h2, try to click its parent container instead
+            if (htmlElement.tagName === 'H2' && htmlElement.parentElement?.classList.contains('cursor-pointer')) {
+              clickTarget = htmlElement.parentElement;
+              yield log(`  Clicking parent container instead of h2`);
+            }
+            
+            yield log(`Clicking year element: ${yearText}`);
+            clickTarget.click();
             state.expandedYears++;
             state.totalInteractions++;
             
-            await sleep(opts.waitTime);
+            // Wait longer to see if content loads dynamically
+            await sleep(opts.waitTime * 2); // Double the wait time
             
-            // Look for expansion triggers near the year element - reduced scope
-            const nearbyExpanders = this.findNearbyExpandableElements(htmlElement);
-            for (const expander of nearbyExpanders.slice(0, 1)) { // Reduced from 2 to 1
-              try {
-                const expanderText = expander.textContent?.trim()?.substring(0, 50) || 'unnamed';
-                
-                // Skip if it looks like a navigation link
-                if (this.isNavigationElement(expanderText) || expander.tagName === 'A') {
-                  continue;
-                }
-                
-                expander.click();
-                await sleep(300); // Reduced from 500ms
-                state.totalInteractions++;
-              } catch (e) {
-                // Silent error handling for expansion elements
+            // Check what changed after clicking
+            const newHTML = document.body.innerHTML.length;
+            const newLinks = document.querySelectorAll('a[href*="exhibition"]').length;
+            const contentAdded = newHTML - initialHTML;
+            const linksAdded = newLinks - initialLinks;
+            
+            yield log(`After clicking ${yearText}:`);
+            yield log(`  HTML length change: ${contentAdded} characters`);
+            yield log(`  Exhibition links added: ${linksAdded}`);
+            
+            if (contentAdded > 100) {
+              yield log(`  SUCCESS: Content was added after clicking!`);
+              
+              // Wait a bit more for any additional content to load
+              await sleep(1000);
+              
+              // Look for any newly appeared exhibition links
+              const newExhibitionLinks = document.querySelectorAll('a[href*="exhibition"]:not([data-processed])') as NodeListOf<HTMLAnchorElement>;
+              yield log(`  Found ${newExhibitionLinks.length} new exhibition links to process`);
+              
+              // Mark them as processed and potentially queue them
+              for (const link of newExhibitionLinks) {
+                link.setAttribute('data-processed', 'true');
+                yield log(`    New link: ${link.href} - "${link.textContent?.trim()?.substring(0, 50)}"`);
               }
+            } else {
+              yield log(`  No significant content added after clicking`);
             }
             
-            yield { state, msg: `Expanded year ${yearText}` };
+            yield { state, msg: `Processed year ${yearText} - content added: ${contentAdded} chars, links: ${linksAdded}` };
           } catch (e) {
             yield log(`Error processing year ${yearText}: ${e.message}`);
           }
