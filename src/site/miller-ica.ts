@@ -33,9 +33,16 @@ export class MillerICABehavior {
     const url = window.location.href;
     const path = window.location.pathname;
     
+    console.log('[MILLER-ICA] isMatch() called');
+    console.log('[MILLER-ICA] Current URL:', url);
+    console.log('[MILLER-ICA] Current path:', path);
+    
     // Only match the main exhibitions page, not individual exhibition/event/varia pages
-    return url.includes('miller-ica.cmu.edu') && 
+    const matches = url.includes('miller-ica.cmu.edu') && 
            (path === '/exhibitions' || path === '/exhibitions/');
+           
+    console.log('[MILLER-ICA] Match result:', matches);
+    return matches;
   }
 
   async *run(ctx) {

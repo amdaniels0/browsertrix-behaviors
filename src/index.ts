@@ -68,10 +68,17 @@ export class BehaviorManager {
 
   constructor() {
     this.behaviors = [];
+    console.log("[BEHAVIOR-MANAGER] Constructor called");
+    console.log("[BEHAVIOR-MANAGER] Site behaviors available:", siteBehaviors.map(b => b.id));
+    
     this.loadedBehaviors = siteBehaviors.reduce((behaviors, next) => {
+      console.log("[BEHAVIOR-MANAGER] Loading behavior:", next.id);
       behaviors[next.id] = next;
       return behaviors;
     }, {});
+    
+    console.log("[BEHAVIOR-MANAGER] All loaded behaviors:", Object.keys(this.loadedBehaviors));
+    
     this.mainBehavior = null;
     this.inited = false;
     this.started = false;
@@ -80,6 +87,7 @@ export class BehaviorManager {
       extractName: DEFAULT_LINK_EXTRACT,
     };
     behaviorLog("Loaded behaviors for: " + self.location.href);
+    console.log("[BEHAVIOR-MANAGER] Current URL:", self.location.href);
   }
 
   init(
@@ -157,26 +165,41 @@ export class BehaviorManager {
     const opts = this.opts;
     let siteMatch = false;
 
+    console.log("[BEHAVIOR-MANAGER] selectMainBehavior called, siteSpecific enabled:", opts.siteSpecific);
+    console.log("[BEHAVIOR-MANAGER] Checking behaviors for URL:", self.location.href);
+
     if (opts.siteSpecific) {
       for (const name in this.loadedBehaviors) {
         const siteBehaviorClass = this.loadedBehaviors[name];
-        if (siteBehaviorClass.isMatch()) {
-          behaviorLog("Using Site-Specific Behavior: " + name);
-          this.mainBehaviorClass = siteBehaviorClass;
-          const siteSpecificOpts =
-            typeof opts.siteSpecific === "object"
-              ? opts.siteSpecific[name] || {}
-              : {};
-          try {
-            this.mainBehavior = new BehaviorRunner(
-              siteBehaviorClass,
-              siteSpecificOpts,
-            );
-          } catch (e) {
-            behaviorLog({ msg: e.toString(), siteSpecific: true }, "error");
+        console.log(`[BEHAVIOR-MANAGER] Checking behavior ${name}...`);
+        
+        try {
+          const matches = siteBehaviorClass.isMatch();
+          console.log(`[BEHAVIOR-MANAGER] ${name}.isMatch() = ${matches}`);
+          
+          if (matches) {
+            behaviorLog("Using Site-Specific Behavior: " + name);
+            console.log(`[BEHAVIOR-MANAGER] MATCH FOUND! Using behavior: ${name}`);
+            this.mainBehaviorClass = siteBehaviorClass;
+            const siteSpecificOpts =
+              typeof opts.siteSpecific === "object"
+                ? opts.siteSpecific[name] || {}
+                : {};
+            try {
+              this.mainBehavior = new BehaviorRunner(
+                siteBehaviorClass,
+                siteSpecificOpts,
+              );
+              console.log(`[BEHAVIOR-MANAGER] BehaviorRunner created for ${name}`);
+            } catch (e) {
+              console.error(`[BEHAVIOR-MANAGER] Error creating BehaviorRunner for ${name}:`, e);
+              behaviorLog({ msg: e.toString(), siteSpecific: true }, "error");
+            }
+            siteMatch = true;
+            break;
           }
-          siteMatch = true;
-          break;
+        } catch (e) {
+          console.error(`[BEHAVIOR-MANAGER] Error checking isMatch for ${name}:`, e);
         }
       }
     }
