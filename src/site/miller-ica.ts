@@ -54,28 +54,61 @@ export class MillerICABehavior {
     try {
       yield log("Starting Miller ICA Exhibitions expansion");
 
-      // Check runtime limit
-      if (Date.now() - startTime > opts.maxRuntime) {
-        yield log("Runtime limit reached, stopping");
-        return;
+      // Simple approach: Find and click all year containers
+      const yearContainers = document.querySelectorAll('div.py-4.cursor-pointer');
+      yield log(`Found ${yearContainers.length} year containers to expand`);
+      
+      // Click each year container to expand it
+      for (let i = 0; i < Math.min(yearContainers.length, 5); i++) {
+        // Safety check: ensure we don't run too long
+        if (Date.now() - startTime > 20000) {
+          yield log("Time limit (20s) reached, stopping expansion");
+          break;
+        }
+        
+        const container = yearContainers[i] as HTMLElement;
+        const yearText = container.querySelector('h2')?.textContent?.trim();
+        
+        if (!yearText) continue;
+        
+        yield log(`Clicking year container: ${yearText}`);
+        
+        try {
+          // Scroll to element
+          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          await sleep(500);
+          
+          // Click the container
+          container.click();
+          state.expandedYears++;
+          
+          // Wait for content to load
+          await sleep(1500);
+          
+          yield log(`Expanded year ${yearText}`);
+        } catch (e) {
+          yield log(`Error expanding ${yearText}: ${e.message}`);
+        }
+      }
+      
+      // After expanding, wait a bit and then look for any new images that need to load
+      yield log("Waiting for content to settle...");
+      await sleep(2000);
+      
+      // Trigger any lazy-loaded images
+      const images = document.querySelectorAll('img[data-src], img.lazyload, picture source');
+      yield log(`Found ${images.length} potentially lazy-loaded images`);
+      
+      for (const img of Array.from(images).slice(0, 20)) {
+        try {
+          (img as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
+          await sleep(100);
+        } catch (e) {
+          // Continue on error
+        }
       }
 
-      // Expand year sections to reveal hidden exhibition content
-      yield* this.expandYearSections(ctx, startTime);
-      
-      // Check runtime limit again
-      if (Date.now() - startTime > opts.maxRuntime) {
-        yield log("Runtime limit reached after expansion, stopping");
-        return;
-      }
-      
-      // Wait for content to fully load after expansion
-      await sleep(1000); // Reduced from 2000ms
-      
-      // Discover and queue exhibition links for the crawler
-      yield* this.discoverExhibitionLinks(ctx);
-
-      yield log(`Miller ICA expansion complete. Years expanded: ${state.expandedYears}, Links discovered: ${state.linksDiscovered}, Total interactions: ${state.totalInteractions}`);
+      yield log(`Miller ICA expansion complete. Years expanded: ${state.expandedYears}`);
     } catch (error) {
       yield log(`Miller ICA behavior error: ${error.message}`);
       // Don't rethrow - just log and continue
