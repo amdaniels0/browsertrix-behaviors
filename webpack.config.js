@@ -37,6 +37,12 @@ const tsConfig = (_env, argv) => {
       minimizer: [
         new TerserPlugin({
           extractComments: false,
+          terserOptions: {
+            compress: {
+              drop_console: false,
+              pure_funcs: [],
+            },
+          },
         }),
       ],
     },
