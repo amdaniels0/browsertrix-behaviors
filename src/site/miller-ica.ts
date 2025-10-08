@@ -52,17 +52,26 @@ export class MillerICABehavior {
     const startTime = Date.now();
     
     try {
+      // Double-check we're on the right page
+      if (!window.location.pathname.startsWith('/exhibitions')) {
+        yield log("Not on exhibitions page, skipping behavior");
+        return;
+      }
+      
       yield log("Starting Miller ICA Exhibitions expansion");
 
       // Simple approach: Find and click all year containers
       const yearContainers = document.querySelectorAll('div.py-4.cursor-pointer');
       yield log(`Found ${yearContainers.length} year containers to expand`);
       
+      // Limit to first 3 years to avoid timeout
+      const maxExpansions = Math.min(yearContainers.length, 3);
+      
       // Click each year container to expand it
-      for (let i = 0; i < Math.min(yearContainers.length, 5); i++) {
-        // Safety check: ensure we don't run too long
-        if (Date.now() - startTime > 20000) {
-          yield log("Time limit (20s) reached, stopping expansion");
+      for (let i = 0; i < maxExpansions; i++) {
+        // Hard time limit of 15 seconds
+        if (Date.now() - startTime > 15000) {
+          yield log("Time limit (15s) reached, stopping expansion");
           break;
         }
         
@@ -75,15 +84,15 @@ export class MillerICABehavior {
         
         try {
           // Scroll to element
-          container.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await sleep(500);
+          container.scrollIntoView({ behavior: 'instant', block: 'center' });
+          await sleep(300);
           
           // Click the container
           container.click();
           state.expandedYears++;
           
-          // Wait for content to load
-          await sleep(1500);
+          // Wait briefly for content to load
+          await sleep(1000);
           
           yield log(`Expanded year ${yearText}`);
         } catch (e) {
@@ -91,18 +100,19 @@ export class MillerICABehavior {
         }
       }
       
-      // After expanding, wait a bit and then look for any new images that need to load
+      // Brief wait for content to settle
       yield log("Waiting for content to settle...");
-      await sleep(2000);
+      await sleep(1000);
       
-      // Trigger any lazy-loaded images
+      // Quick scan for lazy-loaded images
       const images = document.querySelectorAll('img[data-src], img.lazyload, picture source');
       yield log(`Found ${images.length} potentially lazy-loaded images`);
       
-      for (const img of Array.from(images).slice(0, 20)) {
+      // Only process first 10 images quickly
+      for (const img of Array.from(images).slice(0, 10)) {
         try {
           (img as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
-          await sleep(100);
+          await sleep(50); // Minimal wait
         } catch (e) {
           // Continue on error
         }

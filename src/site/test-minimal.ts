@@ -17,10 +17,13 @@ export class TestMinimalBehavior {
   }
 
   static isMatch() {
-    // Match all miller-ica pages for testing
-    const matches = window.location.href.includes('miller-ica.cmu.edu');
-    console.log('[TEST-MINIMAL] isMatch() called, result:', matches, 'for URL:', window.location.href);
-    return matches;
+    // DISABLED - only run when explicitly testing
+    return false;
+    
+    // Original code (disabled):
+    // const matches = window.location.href.includes('miller-ica.cmu.edu');
+    // console.log('[TEST-MINIMAL] isMatch() called, result:', matches, 'for URL:', window.location.href);
+    // return matches;
   }
 
   async *run(ctx) {
