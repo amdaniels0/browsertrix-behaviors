@@ -64,14 +64,14 @@ export class MillerICABehavior {
       const yearContainers = document.querySelectorAll('div.py-4.cursor-pointer');
       yield log(`Found ${yearContainers.length} year containers to expand`);
       
-      // Limit to first 3 years to avoid timeout
-      const maxExpansions = Math.min(yearContainers.length, 3);
+      // Expand ALL years (2000-2023)
+      const maxExpansions = yearContainers.length;
       
       // Click each year container to expand it
       for (let i = 0; i < maxExpansions; i++) {
-        // Hard time limit of 15 seconds
-        if (Date.now() - startTime > 15000) {
-          yield log("Time limit (15s) reached, stopping expansion");
+        // Set a generous time limit of 60 seconds for all expansions
+        if (Date.now() - startTime > 60000) {
+          yield log("Time limit (60s) reached, stopping expansion");
           break;
         }
         
@@ -85,14 +85,14 @@ export class MillerICABehavior {
         try {
           // Scroll to element
           container.scrollIntoView({ behavior: 'instant', block: 'center' });
-          await sleep(300);
+          await sleep(200);
           
           // Click the container
           container.click();
           state.expandedYears++;
           
           // Wait briefly for content to load
-          await sleep(1000);
+          await sleep(500);
           
           yield log(`Expanded year ${yearText}`);
         } catch (e) {
@@ -100,23 +100,58 @@ export class MillerICABehavior {
         }
       }
       
-      // Brief wait for content to settle
+      // Wait for all content to settle after expanding all years
       yield log("Waiting for content to settle...");
-      await sleep(1000);
+      await sleep(2000);
       
-      // Quick scan for lazy-loaded images
-      const images = document.querySelectorAll('img[data-src], img.lazyload, picture source');
-      yield log(`Found ${images.length} potentially lazy-loaded images`);
+      // Process ALL lazy-loaded images on the page
+      const lazyImages = document.querySelectorAll('img[data-src], img.lazyload, img[loading="lazy"]');
+      const pictureElements = document.querySelectorAll('picture source');
+      const allImages = document.querySelectorAll('img');
       
-      // Only process first 10 images quickly
-      for (const img of Array.from(images).slice(0, 10)) {
+      yield log(`Found ${lazyImages.length} lazy-loaded images`);
+      yield log(`Found ${pictureElements.length} picture sources`);
+      yield log(`Total images on page: ${allImages.length}`);
+      
+      // Process all lazy images
+      let processedCount = 0;
+      for (const img of Array.from(lazyImages)) {
         try {
           (img as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
-          await sleep(50); // Minimal wait
+          
+          // Trigger lazy loading by setting src from data-src if present
+          const imgEl = img as HTMLImageElement;
+          if (imgEl.dataset.src && !imgEl.src) {
+            imgEl.src = imgEl.dataset.src;
+          }
+          
+          processedCount++;
+          // Small batch delay every 10 images
+          if (processedCount % 10 === 0) {
+            await sleep(100);
+            yield log(`Processed ${processedCount} images...`);
+          }
         } catch (e) {
           // Continue on error
         }
       }
+      
+      // Also scroll through all regular images to ensure they load
+      yield log("Scrolling through all images to ensure loading...");
+      for (let i = 0; i < allImages.length; i++) {
+        try {
+          (allImages[i] as HTMLElement).scrollIntoView({ behavior: 'instant', block: 'center' });
+          
+          // Quick batch delay every 20 images
+          if (i % 20 === 0 && i > 0) {
+            await sleep(100);
+          }
+        } catch (e) {
+          // Continue on error
+        }
+      }
+      
+      state.linksDiscovered = allImages.length;
 
       yield log(`Miller ICA expansion complete. Years expanded: ${state.expandedYears}`);
     } catch (error) {
